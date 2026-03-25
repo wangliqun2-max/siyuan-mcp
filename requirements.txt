@@ -1,15 +1,19 @@
 # Root requirements.txt for Railway/Render deployment
 # Includes both MCP server deps and backend service deps
 
+
 # ── MCP Server ────────────────────────────────────────────────────────────────
 fastmcp>=2.0.0
 uvicorn[standard]>=0.27.0
 starlette>=0.36.0
 python-multipart>=0.0.9
 
+
 # ── Document Parsing ──────────────────────────────────────────────────────────
 pymupdf>=1.23.0
 python-docx>=1.1.0
+pdfplumber>=0.10.0
+
 
 # ── Backend Services ──────────────────────────────────────────────────────────
 openpyxl>=3.1.2
@@ -17,6 +21,8 @@ pyyaml>=6.0
 requests>=2.31.0
 python-dotenv>=1.0.0
 
+
 # ── (Optional) Legacy Flask backend – not needed for MCP server ───────────────
 # flask>=3.0.0
 # flask-cors>=4.0.0
+
