@@ -28,3 +28,12 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Local test/debug scripts and documents (not for production)
+debug_headings.py
+smoke_test.py
+check_keywords.py
+dump_template.py
+print_template.py
+*.docx
+*.pdf
