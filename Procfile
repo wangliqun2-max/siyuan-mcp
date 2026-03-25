@@ -1,1 +1,1 @@
-web: python mcp_server/server.py
+web: uvicorn mcp_server.server:app --host 0.0.0.0 --port $PORT
