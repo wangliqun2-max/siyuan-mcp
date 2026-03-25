@@ -104,7 +104,8 @@ def locate_section(session_id: str, product_type: str = "power_transformer") -> 
     except FileNotFoundError as e:
         return {"error": str(e)}
 
-    total_pages = max((c.get("page", 0) for c in chunks), default=0)
+    # Use physical_page for user-facing total — falls back to chunk page for PDFs
+    total_pages = max((c.get("physical_page", c.get("page", 0)) for c in chunks), default=0)
     section_result = None
 
     # Step 1: Heading-based LLM detection
@@ -424,6 +425,12 @@ async def upload_file(request: Request):
 
         file_chunks = doc_result.get("chunks", [])
         file_headings = doc_result.get("headings", [])
+        # Use actual physical page count from app.xml when available (DOCX),
+        # otherwise fall back to max physical_page in chunks (PDF)
+        file_physical_total = doc_result.get(
+            "total_physical_pages",
+            max((c.get("physical_page", c["page"]) for c in file_chunks), default=1)
+        )
 
         if not file_chunks:
             continue
@@ -431,12 +438,18 @@ async def upload_file(request: Request):
         for chunk in file_chunks:
             chunk["global_page"] = chunk["page"] + page_offset
             chunk["source_file"] = upload.filename
+            # Also offset physical_page so multi-file searches work correctly
+            if "physical_page" in chunk:
+                chunk["physical_page"] += page_offset
         for h in file_headings:
             if "page" in h:
                 h["page"] += page_offset
+            if "physical_page" in h:
+                h["physical_page"] += page_offset
+            if "chunk_page" in h:
+                h["chunk_page"] += page_offset
 
-        last_page = max(c["page"] for c in file_chunks)
-        page_offset += last_page
+        page_offset += file_physical_total
         filenames.append(upload.filename)
         all_chunks.extend(file_chunks)
         all_headings.extend(file_headings)
@@ -450,7 +463,7 @@ async def upload_file(request: Request):
     for chunk in all_chunks:
         chunk["page"] = chunk["global_page"]
 
-    total_pages = max(c["page"] for c in all_chunks)
+    total_pages = max((c.get("physical_page", c["page"]) for c in all_chunks), default=0)
     session_id = uuid.uuid4().hex
 
     with open(os.path.join(tempfile.gettempdir(), f"{session_id}_chunks.json"), "w", encoding="utf-8") as f:

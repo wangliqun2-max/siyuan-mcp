@@ -121,6 +121,11 @@ def locate_section():
 
             file_chunks   = doc_result.get("chunks", [])
             file_headings = doc_result.get("headings", [])
+            # Use actual physical page count when available (DOCX reads from app.xml)
+            file_physical_total = doc_result.get(
+                "total_physical_pages",
+                max((c.get("physical_page", c["page"]) for c in file_chunks), default=1)
+            )
 
             if not file_chunks:
                 print(f"[Upload] Warning: no text extracted from {file.filename}")
@@ -137,7 +142,7 @@ def locate_section():
                 if "page" in h:
                     h["page"] = h["page"] + page_offset
 
-            last_page_in_file = max(c["page"] for c in file_chunks)
+            last_page_in_file = file_physical_total
             last_global = last_page_in_file + page_offset
             file_page_ranges.append({
                 "filename": file.filename,
@@ -145,7 +150,7 @@ def locate_section():
                 "end_page": last_global,
                 "pages": last_page_in_file
             })
-            print(f"[Upload] {file.filename}: {last_page_in_file} pages → global {first_global}-{last_global}")
+            print(f"[Upload] {file.filename}: {file_physical_total} physical pages → global {first_global}-{last_global}")
 
             all_chunks.extend(file_chunks)
             all_headings.extend(file_headings)
@@ -154,7 +159,7 @@ def locate_section():
         if not all_chunks:
             return jsonify({"success": False, "error": "Could not extract text from any of the uploaded files. Are they scanned/image PDFs?"}), 400
 
-        total_pages = max(c["global_page"] for c in all_chunks)
+        total_pages = sum(fr["pages"] for fr in file_page_ranges)
 
         # Use global_page as the "page" field that the rest of the pipeline uses
         for chunk in all_chunks:

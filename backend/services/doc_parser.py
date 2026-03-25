@@ -21,6 +21,18 @@ def _is_heading_style(style_name: str) -> bool:
     return any(name_lower.startswith(p) for p in _HEADING_STYLE_PREFIXES)
 
 
+def _heading_level_from_style(style_name: str) -> int:
+    """Extract integer heading level from Word style name.
+    'Heading 1' → 1, 'Heading 2' → 2, 'Title' → 1, unknown → 2.
+    """
+    import re as _re2
+    name_lower = style_name.lower().strip()
+    if name_lower == "title":
+        return 1
+    m = _re2.search(r'(\d+)', name_lower)
+    return int(m.group(1)) if m else 2
+
+
 # ─── Public API ───────────────────────────────────────────────────────────────
 
 def parse_document(file_path: str) -> dict:
@@ -183,7 +195,12 @@ def keyword_density_find_section(
     """
     kws = [k.lower() for k in (spec_keywords or _TRANSFORMER_SPEC_KEYWORDS)]
 
-    # Score every page
+    # Build chunk_page → physical_page mapping (identity for PDF, different for DOCX)
+    chunk_to_phys: dict[int, int] = {
+        c["page"]: c.get("physical_page", c["page"]) for c in chunks
+    }
+
+    # Score every chunk page
     page_score: dict[int, int] = {}
     for chunk in chunks:
         text_lower = chunk["text"].lower()
@@ -208,7 +225,7 @@ def keyword_density_find_section(
         return {"start_page": None, "end_page": None,
                 "section_title": "", "confidence": 0.0}
 
-    print(f"[DensityFinder] Peak: page {peak_page} score={peak_score}")
+    print(f"[DensityFinder] Peak: chunk {peak_page} (physical {chunk_to_phys.get(peak_page, peak_page)}) score={peak_score}")
 
     # ── Step 3: expand left until a score-0 page is hit ─────────────────────
     page_set = set(all_pages)
@@ -234,6 +251,10 @@ def keyword_density_find_section(
     avg_score = total_score / len(section_pages) if section_pages else 0
     confidence = min(0.95, 0.55 + avg_score * 0.04)
 
+    # Convert to physical pages for user-facing output
+    start_phys = chunk_to_phys.get(start_p, start_p)
+    end_phys = chunk_to_phys.get(end_p, end_p)
+
     # ── Extract a title from the first page of the section ───────────────────
     first_chunk = next((c for c in chunks if c["page"] == start_p), None)
     title = ""
@@ -247,27 +268,32 @@ def keyword_density_find_section(
                 title = line
                 break
 
-    print(f"[DensityFinder] Section: pages {start_p}-{end_p} "
-          f"({len(section_pages)} pages, avg_score={avg_score:.1f}, "
+    print(f"[DensityFinder] Section: physical pages {start_phys}-{end_phys} "
+          f"({len(section_pages)} chunks, avg_score={avg_score:.1f}, "
           f"confidence={confidence:.2f})")
 
     return {
-        "start_page": start_p,
-        "end_page": end_p,
+        "start_page": start_phys,
+        "end_page": end_phys,
         "section_title": title or "Power Transformer Technical Specifications",
         "confidence": confidence,
-        "notes": (f"Peak-expand: peak p={peak_page} score={peak_score}, "
-                  f"avg {avg_score:.1f} spec terms/page"),
+        "notes": (f"Peak-expand: peak chunk={peak_page} (phys={chunk_to_phys.get(peak_page, peak_page)}) "
+                  f"score={peak_score}, avg {avg_score:.1f} spec terms/page"),
     }
 
 
 
 
+
 def get_section_text(chunks: list[dict], start_page: int, end_page: int) -> str:
-    """Extract and concatenate text from a specific chunk-page range."""
+    """Extract and concatenate text from a page range.
+
+    Filters by physical_page when available (DOCX), otherwise falls back to
+    chunk page number (PDF, where page == physical_page).
+    """
     section_chunks = [
         c for c in chunks
-        if start_page <= c["page"] <= end_page
+        if start_page <= c.get("physical_page", c["page"]) <= end_page
     ]
     return "\n\n".join(c["text"] for c in section_chunks)
 
@@ -316,19 +342,37 @@ def find_section_in_headings(
     start_page = h_matched["chunk_page"]
     matched_level = h_matched.get("level", 2)
 
-    # Find next heading of same-or-higher level → that page is end_page.
-    end_page = None
-    for h in headings[matched_idx + 1:]:
-        if h.get("level", 2) <= matched_level and h["chunk_page"] > start_page:
-            end_page = h["chunk_page"]   # inclusive: no -1
-            break
-    if end_page is None:
-        end_page = start_page + 20  # short section: 20-page upper bound
+    # Use physical_page for user-facing start_page (falls back to chunk_page for PDFs)
+    start_physical = h_matched.get("physical_page", start_page)
 
-    print(f"[SectionLookup] '{h_matched['text']}' → pages {start_page}-{end_page}")
+    # Find next heading of same-or-higher level → its physical_page is end boundary
+    end_physical = None
+    for h in headings[matched_idx + 1:]:
+        if h.get("level", 2) <= matched_level and h.get("physical_page", h["chunk_page"]) > start_physical:
+            end_physical = h.get("physical_page", h["chunk_page"])
+            break
+    if end_physical is None:
+        end_physical = start_physical + 40
+
+    # Minimum span guard: tech spec sections must span ≥ 10 physical pages
+    MIN_PHYS_SPAN = 10
+    if (end_physical - start_physical) < MIN_PHYS_SPAN:
+        extended = None
+        for h in headings[matched_idx + 1:]:
+            h_phys = h.get("physical_page", h["chunk_page"])
+            if h_phys >= start_physical + MIN_PHYS_SPAN:
+                extended = h_phys
+                break
+        if extended is None:
+            extended = start_physical + 60
+        print(f"[SectionLookup] Narrow span ({end_physical - start_physical} pages), "
+              f"extending end_page {end_physical} → {extended}")
+        end_physical = extended
+
+    print(f"[SectionLookup] '{h_matched['text']}' → physical pages {start_physical}-{end_physical}")
     return {
-        "start_page": start_page,
-        "end_page": end_page,
+        "start_page": start_physical,
+        "end_page": end_physical,
         "section_title": h_matched["text"],
         "confidence": 0.85,
     }
@@ -404,6 +448,7 @@ def _extract_headings_from_pdf(chunks: list[dict]) -> list[dict]:
             headings.append({
                 "text": full_heading,
                 "chunk_page": page,
+                "physical_page": chunk.get("physical_page", page),  # PDF: same as page
                 "level": level,
             })
 
@@ -412,6 +457,24 @@ def _extract_headings_from_pdf(chunks: list[dict]) -> list[dict]:
         for h in headings[:5]:
             print(f"  [{h['chunk_page']}] {h['text']}")
     return headings
+
+
+def _count_page_breaks_in_para(para_element) -> int:
+    """Count explicit page transitions inside a paragraph XML element.
+
+    Counts both:
+    - <w:br w:type="page"/>  – manual page break
+    - <w:lastRenderedPageBreak/> – Word's automatic page break marker (most reliable)
+    """
+    count = 0
+    WNS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    for elem in para_element.iter():
+        tag = elem.tag
+        if tag == f"{{{WNS}}}br" and elem.get(f"{{{WNS}}}type") == "page":
+            count += 1
+        elif tag == f"{{{WNS}}}lastRenderedPageBreak":
+            count += 1
+    return count
 
 
 def _extract_title_from_chunk(text: str, keywords: list[str]) -> str:
@@ -429,13 +492,15 @@ def _parse_pdf(file_path: str) -> dict:
 
     Returns {"chunks": [...], "headings": [...]} — same shape as _parse_docx.
     Headings are extracted by scanning each page for numbered-section lines.
+    For PDF, physical_page == page (pdfplumber uses physical page numbers).
     """
     chunks: list[dict] = []
     with pdfplumber.open(file_path) as pdf:
         for page_num, page in enumerate(pdf.pages, start=1):
             text = page.extract_text()
             if text and text.strip():
-                chunks.append({"page": page_num, "text": text.strip()})
+                # physical_page == page for PDFs
+                chunks.append({"page": page_num, "physical_page": page_num, "text": text.strip()})
     headings = _extract_headings_from_pdf(chunks)
     return {"chunks": chunks, "headings": headings}
 
@@ -443,11 +508,16 @@ def _parse_pdf(file_path: str) -> dict:
 
 def _parse_docx(file_path: str) -> dict:
     """
-    Parse a Word document.
+    Parse a Word document, tracking BOTH chunk pages and physical Word pages.
 
     - Iterates body elements in document order, capturing paragraphs AND tables.
     - Detects headings by paragraph style (Heading 1/2/3, Title, …).
-    - Groups content into pseudo-pages of ~3 000 chars each.
+    - Groups content into pseudo-chunks of ~3 000 chars each (chunk_page).
+    - Tracks physical Word page numbers via <w:lastRenderedPageBreak> and
+      manual <w:br type="page"/> elements (physical_page).
+
+    Each chunk: {"page": chunk_page, "physical_page": word_physical_page, "text": str}
+    Each heading: {"text": str, "chunk_page": int, "physical_page": int, "level": int}
 
     Returns {"chunks": [...], "headings": [...]}.
     """
@@ -457,16 +527,23 @@ def _parse_docx(file_path: str) -> dict:
 
     current_text: list[str] = []
     current_chars = 0
-    page_num = 1
+    chunk_page = 1
+    physical_page = 1          # tracks current Word physical page
+    chunk_physical_start = 1   # physical page at the start of the current chunk
     PAGE_SIZE = 3000
 
     def flush() -> None:
-        nonlocal page_num, current_text, current_chars
+        nonlocal chunk_page, current_text, current_chars, chunk_physical_start
         if current_text:
-            chunks.append({"page": page_num, "text": "\n".join(current_text)})
-            page_num += 1
+            chunks.append({
+                "page": chunk_page,
+                "physical_page": chunk_physical_start,
+                "text": "\n".join(current_text),
+            })
+            chunk_page += 1
             current_text = []
             current_chars = 0
+            chunk_physical_start = physical_page   # next chunk starts on current physical page
 
     def add_text(text: str) -> None:
         nonlocal current_chars
@@ -485,12 +562,20 @@ def _parse_docx(file_path: str) -> dict:
 
         if tag == "p":
             from docx.text.paragraph import Paragraph
+
+            # ── Count page breaks that occur in this paragraph ──────────────
+            breaks = _count_page_breaks_in_para(child)
+            if breaks:
+                flush()
+                physical_page += breaks
+                chunk_physical_start = physical_page
+
             para = Paragraph(child, doc)
             text = para.text.strip()
             if not text:
                 continue
 
-            # Detect heading before flushing so page_num is accurate
+            # ── Detect heading ───────────────────────────────────────────────
             try:
                 style_name = para.style.name if para.style else ""
             except Exception:
@@ -499,7 +584,13 @@ def _parse_docx(file_path: str) -> dict:
             if _is_heading_style(style_name):
                 # Force a new chunk so the heading starts cleanly
                 flush()
-                headings.append({"text": text, "chunk_page": page_num})
+                level = _heading_level_from_style(style_name)
+                headings.append({
+                    "text": text,
+                    "chunk_page": chunk_page,
+                    "physical_page": physical_page,
+                    "level": level,
+                })
 
             add_text(text)
 
@@ -522,4 +613,37 @@ def _parse_docx(file_path: str) -> dict:
 
     flush()  # flush any remaining text
 
-    return {"chunks": chunks, "headings": headings}
+    detected_total = physical_page   # page breaks we actually detected
+
+    # ── Try to read actual page count from DOCX extended-properties ──────────
+    # Word stores the rendered page count in docProps/app.xml (<Pages> element).
+    # This lets us scale our detected page numbers to accurate physical pages.
+    actual_total = detected_total  # default: use detected if app.xml unavailable
+    try:
+        APP_REL = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties"
+        APP_NS  = "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"
+        app_part = doc.part.package.part_related_by(APP_REL)
+        from lxml import etree as _etree
+        app_xml = _etree.fromstring(app_part.blob)
+        pages_elem = app_xml.find(f"{{{APP_NS}}}Pages")
+        if pages_elem is not None and pages_elem.text:
+            actual_total = int(pages_elem.text)
+            print(f"[DOCX] app.xml page count: {actual_total} (detected: {detected_total})")
+    except Exception as e:
+        print(f"[DOCX] Could not read app.xml page count: {e}")
+
+    # ── Scale physical_page values if detected count differs from actual ──────
+    if actual_total != detected_total and detected_total > 0:
+        scale = actual_total / detected_total
+        print(f"[DOCX] Scaling physical pages by {scale:.3f} ({detected_total} → {actual_total})")
+        for c in chunks:
+            c["physical_page"] = max(1, round(c["physical_page"] * scale))
+        for h in headings:
+            if "physical_page" in h:
+                h["physical_page"] = max(1, round(h["physical_page"] * scale))
+
+    print(f"[DOCX] {len(chunks)} chunks | {len(headings)} headings | "
+          f"physical pages: detected={detected_total}, actual={actual_total}")
+
+    return {"chunks": chunks, "headings": headings, "total_physical_pages": actual_total}
+

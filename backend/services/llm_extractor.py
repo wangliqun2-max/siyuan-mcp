@@ -308,11 +308,6 @@ def find_section_from_headings(
         return _empty_section(result.get("notes", "LLM could not match any heading"))
 
     # ── Determine end_page using SAME-OR-HIGHER-LEVEL heading boundary ───────
-    # The matched heading may be a level-1 chapter like "14 Power Transformers".
-    # Its sub-sections (e.g. "14.6 Scope of Works") start on the SAME page, so
-    # using "next heading - 1" would give end_page = start_page - 1 (wrong!).
-    # Instead, find the first following heading whose level is <= matched level.
-
     matched_idx = next(
         (i for i, h in enumerate(headings)
          if h["chunk_page"] == chunk_page and matched.lower() in h["text"].lower()),
@@ -327,32 +322,50 @@ def find_section_from_headings(
 
     matched_level = headings[matched_idx].get("level", 2) if matched_idx is not None else 2
 
-    end_page = None
+    # Use physical_page for user-facing output (falls back to chunk_page for PDFs)
+    start_physical = chunk_page
+    if matched_idx is not None:
+        start_physical = headings[matched_idx].get("physical_page", chunk_page)
+
+    end_physical = None
     if matched_idx is not None:
         for h in headings[matched_idx + 1:]:
             h_level = h.get("level", 2)
-            if h_level <= matched_level and h["chunk_page"] > chunk_page:
-                # Use the next heading's page directly (no -1).
-                # That page may still contain the tail of the current section.
-                end_page = h["chunk_page"]
+            h_phys = h.get("physical_page", h["chunk_page"])
+            if h_level <= matched_level and h_phys > start_physical:
+                end_physical = h_phys
                 break
 
-    if end_page is None:
-        end_page = chunk_page + 40  # generous upper bound when no next chapter found
+    if end_physical is None:
+        end_physical = start_physical + 40
 
-    # Sanity guard: end_page must be >= start_page
-    if end_page < chunk_page:
-        print(f"[HeadingSection] end_page {end_page} < start_page {chunk_page}, "
-              f"using start+40 as fallback.")
-        end_page = chunk_page + 40
+    # Sanity guard
+    if end_physical < start_physical:
+        end_physical = start_physical + 40
 
-    print(f"[HeadingSection] '{matched}' → pages {chunk_page}-{end_page} "
+    # Minimum span guard: tech spec sections must span >= 10 physical pages
+    MIN_PHYS_SPAN = 10
+    if (end_physical - start_physical) < MIN_PHYS_SPAN:
+        extended = None
+        if matched_idx is not None:
+            for h in headings[matched_idx + 1:]:
+                h_phys = h.get("physical_page", h["chunk_page"])
+                if h_phys >= start_physical + MIN_PHYS_SPAN:
+                    extended = h_phys
+                    break
+        if extended is None:
+            extended = start_physical + 60
+        print(f"[HeadingSection] Narrow span ({end_physical - start_physical} pages), "
+              f"extending end_page {end_physical} → {extended}")
+        end_physical = extended
+
+    print(f"[HeadingSection] '{matched}' → physical pages {start_physical}-{end_physical} "
           f"(matched_level=L{matched_level})")
 
     return {
         "section_title": matched,
-        "start_page": chunk_page,
-        "end_page": end_page,
+        "start_page": start_physical,
+        "end_page": end_physical,
         "confidence": result.get("confidence", 0.8),
         "notes": result.get("notes", ""),
     }
