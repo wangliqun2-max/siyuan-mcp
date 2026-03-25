@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>思源电气 · 标书参数智能提取</title>
+    <meta name="description" content="自动从英文标书中提取变压器技术规格参数">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="app-shell">
+
+    <!-- ── Sidebar ── -->
+    <aside class="sidebar">
+        <div class="sidebar-logo">
+            <div class="logo-mark">⚡</div>
+            <div class="logo-text">
+                <span class="logo-name">思源电气</span>
+                <span class="logo-sub">标书分析系统</span>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav">
+            <div class="nav-section-label">工作流程</div>
+
+            <div class="nav-item active" id="step-dot-1">
+                <div class="nav-item-indicator">
+                    <span class="nav-step-num">1</span>
+                    <svg class="nav-check" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <span class="nav-item-label">上传标书</span>
+            </div>
+            <div class="nav-connector"></div>
+
+            <div class="nav-item" id="step-dot-2">
+                <div class="nav-item-indicator">
+                    <span class="nav-step-num">2</span>
+                    <svg class="nav-check" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <span class="nav-item-label">章节定位</span>
+            </div>
+            <div class="nav-connector"></div>
+
+            <div class="nav-item" id="step-dot-3">
+                <div class="nav-item-indicator">
+                    <span class="nav-step-num">3</span>
+                    <svg class="nav-check" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <span class="nav-item-label">参数提取</span>
+            </div>
+            <div class="nav-connector step-line"></div>
+
+            <div class="nav-item" id="step-dot-4">
+                <div class="nav-item-indicator">
+                    <span class="nav-step-num">4</span>
+                    <svg class="nav-check" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </div>
+                <span class="nav-item-label">下载结果</span>
+            </div>
+        </nav>
+
+        <div class="sidebar-footer">
+            <span class="sidebar-badge">POC · Transformer v1.0</span>
+        </div>
+    </aside>
+
+    <!-- ── Main Content ── -->
+    <main class="main-content">
+
+        <!-- Step 1: Upload -->
+        <section class="panel" id="step1">
+            <div class="panel-header">
+                <div class="panel-title-group">
+                    <h1 class="panel-title">上传标书文件</h1>
+                    <p class="panel-subtitle">支持 PDF、Word (.docx)，请上传技术标书文件</p>
+                </div>
+            </div>
+
+            <div class="panel-body">
+                <div class="upload-zone" id="uploadZone">
+                    <input type="file" id="fileInput" accept=".pdf,.docx,.doc" multiple hidden>
+                    <div class="upload-inner">
+                        <div class="upload-icon-wrap">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                        </div>
+                        <div class="upload-text-wrap">
+                            <p class="upload-primary">拖拽文件到此处，或<button class="btn-link" onclick="document.getElementById('fileInput').click()">点击选择</button></p>
+                            <p class="upload-hint">支持 .pdf / .docx · 可多选</p>
+                        </div>
+                    </div>
+                    <div class="file-list" id="fileList"></div>
+                </div>
+
+                <div class="field-group">
+                    <label class="field-label">产品类型</label>
+                    <div class="product-options">
+                        <button class="product-btn active" data-product="transformer">
+                            <span class="product-icon">🔋</span>
+                            <span>变压器</span>
+                        </button>
+                        <button class="product-btn" disabled title="POC 阶段暂不支持">
+                            <span class="product-icon">⚡</span>
+                            <span>断路器</span>
+                            <span class="product-badge">即将推出</span>
+                        </button>
+                        <button class="product-btn" disabled title="POC 阶段暂不支持">
+                            <span class="product-icon">🔌</span>
+                            <span>电缆</span>
+                            <span class="product-badge">即将推出</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="panel-actions">
+                    <button class="btn-primary" id="btnLocate" onclick="locateSection()" disabled>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                        开始分析 · 定位章节
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Step 2: Section Result -->
+        <section class="panel hidden" id="step2">
+            <div class="panel-header">
+                <div class="panel-title-group">
+                    <h1 class="panel-title">章节定位结果</h1>
+                    <p class="panel-subtitle">AI 已在标书中找到变压器相关章节，请确认后开始提取</p>
+                </div>
+                <div class="confidence-badge" id="confidenceBadge"></div>
+            </div>
+
+            <div class="panel-body">
+                <div class="result-card" id="sectionResult">
+                    <div class="result-card-inner">
+                        <div class="result-title" id="sectionTitle"></div>
+                        <div class="result-meta-row">
+                            <div class="result-meta-item">
+                                <span class="result-meta-label">页码范围</span>
+                                <span class="result-meta-value" id="sectionPages">—</span>
+                            </div>
+                            <div class="result-meta-item">
+                                <span class="result-meta-label">文档总页数</span>
+                                <span class="result-meta-value" id="totalPages">—</span>
+                            </div>
+                        </div>
+                        <div class="result-notes" id="sectionNotes"></div>
+                    </div>
+                </div>
+
+                <div class="field-group">
+                    <label class="field-label">手动调整页码范围（如需）</label>
+                    <div class="page-range-inputs">
+                        <div class="page-input-group">
+                            <label class="page-input-label">起始页</label>
+                            <input type="number" id="startPage" class="page-input" min="1">
+                        </div>
+                        <div class="page-range-sep">—</div>
+                        <div class="page-input-group">
+                            <label class="page-input-label">结束页</label>
+                            <input type="number" id="endPage" class="page-input" min="1">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="panel-actions">
+                    <button class="btn-ghost" onclick="goBack()">← 返回</button>
+                    <button class="btn-primary" onclick="extractParams()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+                        确认章节 · 开始提取
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Loading State -->
+        <section class="panel hidden" id="loadingState">
+            <div class="loading-panel">
+                <div class="loading-spinner-wrap">
+                    <div class="loading-ring"></div>
+                </div>
+                <h2 class="loading-title" id="loadingTitle">正在处理中...</h2>
+                <div class="loading-steps-list">
+                    <div class="loading-step-item" id="lsStep1">
+                        <span class="ls-icon" id="ls1">○</span>
+                        <span class="ls-label">解析文档内容</span>
+                    </div>
+                    <div class="loading-step-item" id="lsStep2">
+                        <span class="ls-icon" id="ls2">○</span>
+                        <span class="ls-label">AI 定位产品章节</span>
+                    </div>
+                    <div class="loading-step-item" id="lsStep3">
+                        <span class="ls-icon" id="ls3">○</span>
+                        <span class="ls-label">提取技术规格参数</span>
+                    </div>
+                    <div class="loading-step-item" id="lsStep4">
+                        <span class="ls-icon" id="ls4">○</span>
+                        <span class="ls-label">整理输出结果</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Step 3 & 4: Results -->
+        <section class="panel panel-results hidden" id="step3">
+            <div class="panel-header">
+                <div class="panel-title-group">
+                    <h1 class="panel-title">参数提取结果</h1>
+                    <p class="panel-subtitle" id="resultSubtitle">—</p>
+                </div>
+                <div class="stats-row" id="statsPills"></div>
+            </div>
+
+            <!-- Split Panel -->
+            <div class="split-panel">
+                <!-- Left: Param list -->
+                <div class="split-left">
+                    <div class="split-toolbar">
+                        <span class="split-toolbar-label">参数列表</span>
+                        <div class="split-toolbar-actions">
+                            <button class="btn-xs" id="expandAllBtn" onclick="toggleAllSections(true)">展开全部</button>
+                            <button class="btn-xs" id="collapseAllBtn" onclick="toggleAllSections(false)">折叠全部</button>
+                        </div>
+                    </div>
+                    <div id="paramGroups" class="param-groups"></div>
+                </div>
+
+                <!-- Right: Document viewer -->
+                <div class="split-right">
+                    <div class="split-toolbar">
+                        <span class="split-toolbar-label">标书原文</span>
+                        <span class="split-toolbar-hint" id="docHint">点击左侧参数可定位原文</span>
+                    </div>
+                    <div id="docViewer" class="doc-viewer">
+                        <div class="doc-placeholder">完成参数提取后，点击左侧参数可在此查看原文位置</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Export -->
+            <div class="export-bar">
+                <div class="export-bar-info">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    <span>每条参数一行：参数名 / 是否找到 / 值 / 单位 / 来源原文（前50字）</span>
+                </div>
+                <div class="export-bar-actions">
+                    <button class="btn-ghost" onclick="resetAll()">↺ 重新分析</button>
+                    <button class="btn-primary btn-export" onclick="downloadCsv()">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        下载 CSV
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+</div>
+
+<!-- Error Toast -->
+<div class="toast-error hidden" id="errorToast">
+    <div class="toast-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    </div>
+    <span class="error-msg" id="errorMsg"></span>
+    <button class="toast-close" onclick="hideError()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+</div>
+
+<!-- Legacy step indicator (hidden, kept for JS compat) -->
+<div id="stepIndicator" style="display:none"></div>
+
+<!-- Param name tooltip -->
+<div id="paramTooltip" class="param-tooltip hidden"></div>
+
+<script src="script.js"></script>
+</body>
+</html>

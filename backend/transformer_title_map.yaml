@@ -1,0 +1,34 @@
+products:
+  power_transformer:
+    description: 主变压器 / 电力变压器的技术规格章节
+    exclude_titles:
+    - AUXILIARY TRANSFORMER
+    - 33/0.415kV AUXILIARY TRANSFORMER
+    - STATION TRANSFORMER
+    - RECTIFIER TRANSFORMER
+    - INSTRUMENT TRANSFORMER
+    - CURRENT TRANSFORMER
+    - VOLTAGE TRANSFORMER
+    - TRANSFORMER ONLINE CONDITION MONITORING
+    - EARTHING TRANSFORMER
+    known_titles:
+    - 132/33KV POWER TRANSFORMERS (AIS-AIS)
+    - 132/33 kV POWER TRANSFORMER
+    - MAIN POWER TRANSFORMER
+    - POWER TRANSFORMER UNIT
+    - TWO WINDING POWER TRANSFORMER
+    - HV TRANSFORMER SCHEDULE
+    - POWER TRANSFORMERS
+    - TRANSFORMER TECHNICAL SCHEDULE
+    - Section VII. Employer’s Requirements- A - Scope of Supply
+    - 14  Power Transformers
+    - 14 Power Transformers
+  site_conditions:
+    description: 现场运行条件 / 环境参数章节
+    exclude_titles: []
+    known_titles:
+    - SITE CONDITIONS
+    - ENVIRONMENTAL CONDITIONS
+    - CLIMATIC CONDITIONS
+    - AMBIENT CONDITIONS
+    - INSTALLATION SITE
